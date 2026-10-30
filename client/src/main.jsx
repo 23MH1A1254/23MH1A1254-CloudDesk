@@ -1,0 +1,458 @@
+﻿
+import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./style.css";
+
+function App() {
+  const [tickets, setTickets] = useState([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [message, setMessage] = useState("Connecting to CloudDesk...");
+  const [updatingTickets, setUpdatingTickets] = useState([]);
+  const [deletingTickets, setDeletingTickets] = useState([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  // Login state
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const api = "http://localhost:5000/api";
+
+  // DEMO ONLY: replace with backend authentication before deployment.
+  function handleLogin(event) {
+    event.preventDefault();
+
+    if (
+      email.trim().toLowerCase() === "admin@clouddesk.com" &&
+      password === "CloudDesk123!"
+    ) {
+      setIsLoggedIn(true);
+      setLoginError("");
+      setMessage("Welcome to CloudDesk!");
+    } else {
+      setLoginError("Invalid email or password.");
+    }
+  }
+
+  function handleLogout() {
+    setIsLoggedIn(false);
+    setEmail("");
+    setPassword("");
+    setLoginError("");
+    setMessage("You have signed out.");
+  }
+
+  async function loadTickets() {
+    try {
+      const response = await fetch(`${api}/tickets`);
+
+      if (!response.ok) {
+        throw new Error("Unable to load tickets");
+      }
+
+      const data = await response.json();
+      setTickets(data);
+      setMessage("Your support workspace is ready");
+    } catch {
+      setMessage(
+        "Cannot connect to API. Check that Docker services are running."
+      );
+    }
+  }
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      loadTickets();
+    }
+  }, [isLoggedIn]);
+
+  async function createTicket(event) {
+    event.preventDefault();
+
+    try {
+      const response = await fetch(`${api}/tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to create ticket");
+      }
+
+      setTitle("");
+      setDescription("");
+      setMessage("Ticket created successfully");
+      await loadTickets();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function updateTicketStatus(ticketId, newStatus) {
+    setUpdatingTickets(current => [...current, ticketId]);
+
+    try {
+      const response = await fetch(`${api}/tickets/${ticketId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to update ticket status");
+      }
+
+      setTickets(current =>
+        current.map(ticket =>
+          ticket.id === ticketId ? data : ticket
+        )
+      );
+
+      setMessage(
+        `Ticket CD-${ticketId} status updated to ${data.status}`
+      );
+    } catch (error) {
+      setMessage(error.message);
+      await loadTickets();
+    } finally {
+      setUpdatingTickets(current =>
+        current.filter(id => id !== ticketId)
+      );
+    }
+  }
+
+  async function deleteTicket(ticketId) {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ticket CD-${ticketId}? This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingTickets(current => [...current, ticketId]);
+
+    try {
+      const response = await fetch(`${api}/tickets/${ticketId}`, {
+        method: "DELETE"
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to delete ticket");
+      }
+
+      setTickets(current =>
+        current.filter(ticket => ticket.id !== ticketId)
+      );
+
+      setMessage(`Ticket CD-${ticketId} deleted successfully`);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setDeletingTickets(current =>
+        current.filter(id => id !== ticketId)
+      );
+    }
+  }
+
+  const openCount = tickets.filter(
+    ticket => ticket.status === "Open"
+  ).length;
+
+  const resolvedCount = tickets.filter(
+    ticket => ticket.status === "Resolved"
+  ).length;
+
+  const inProgressCount = tickets.filter(
+    ticket => ticket.status === "In Progress"
+  ).length;
+
+  const filteredTickets = tickets.filter(ticket => {
+    const matchesSearch = (ticket.title || "")
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === "All" || ticket.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  // LOGIN PAGE
+  if (!isLoggedIn) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <div className="login-logo">☁</div>
+
+          <h1>CloudDesk</h1>
+
+          <p className="login-subtitle">
+            Smart support. Better experiences.
+          </p>
+
+          <h2>Welcome back!</h2>
+
+          <p className="login-description">
+            Sign in to your support workspace.
+          </p>
+
+          <form onSubmit={handleLogin}>
+            <label htmlFor="login-email">
+              Email address
+            </label>
+
+            <input
+              id="login-email"
+              type="email"
+              placeholder="admin@clouddesk.com"
+              value={email}
+              onChange={event => setEmail(event.target.value)}
+              autoComplete="username"
+              required
+            />
+
+            <label htmlFor="login-password">
+              Password
+            </label>
+
+            <input
+              id="login-password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={event => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+
+            {loginError && (
+              <p className="login-error" role="alert">
+                {loginError}
+              </p>
+            )}
+
+            <button type="submit" className="login-button">
+              Sign in →
+            </button>
+          </form>
+
+          <p className="login-footer">
+            CloudDesk · Customer Support Platform
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // EXISTING DASHBOARD
+  return (
+    <div className="layout">
+      <aside>
+        <h2>☁ CloudDesk</h2>
+        <p>SMART SUPPORT</p>
+
+        <div className="nav active">▦ &nbsp; Overview</div>
+        <div className="nav">▤ &nbsp; Tickets</div>
+        <div className="nav">◉ &nbsp; Customers</div>
+        <div className="nav">⚙ &nbsp; Settings</div>
+
+        <div className="sidebar-bottom">
+          Customer Support Platform
+        </div>
+      </aside>
+
+      <main>
+        <header>
+          <div>
+            <span className="muted">Workspace / </span>
+            Overview
+
+            <h1>Good day, Support Team 👋</h1>
+
+            <p className="muted">
+              Manage customer conversations in one place.
+            </p>
+          </div>
+
+          <div className="header-actions">
+            <span className="pill">● Local workspace</span>
+            <button
+              type="button"
+              className="logout-button"
+              onClick={handleLogout}
+            >
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        <div className="notice" role="status">
+          {message}
+        </div>
+
+        <section className="stats">
+          <article>
+            <p>Total tickets</p>
+            <h2>{tickets.length}</h2>
+            <small>All recorded tickets</small>
+          </article>
+
+          <article>
+            <p>Open tickets</p>
+            <h2>{openCount}</h2>
+            <small>Awaiting resolution</small>
+          </article>
+
+          <article>
+            <p>Resolved tickets</p>
+            <h2>{resolvedCount}</h2>
+            <small>Completed tickets</small>
+          </article>
+        </section>
+
+        <section className="panel">
+          <h2>Create a support ticket</h2>
+
+          <form onSubmit={createTicket}>
+            <label>
+              Ticket title
+
+              <input
+                value={title}
+                onChange={event => setTitle(event.target.value)}
+                required
+                maxLength={200}
+                placeholder="What does the customer need help with?"
+              />
+            </label>
+
+            <label>
+              Description
+
+              <textarea
+                value={description}
+                onChange={event => setDescription(event.target.value)}
+                placeholder="Add details..."
+              />
+            </label>
+
+            <button type="submit">+ Create ticket</button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <h2>Recent tickets</h2>
+
+          <div className="ticket-filters">
+            <input
+              type="text"
+              placeholder="Search tickets by title..."
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              aria-label="Search tickets by title"
+            />
+
+            <select
+              value={statusFilter}
+              onChange={event => setStatusFilter(event.target.value)}
+              aria-label="Filter tickets by status"
+            >
+              <option value="All">All statuses</option>
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+          </div>
+
+          {filteredTickets.length === 0 ? (
+            <p className="muted">
+              {tickets.length === 0
+                ? "No tickets yet. Create your first ticket above."
+                : "No tickets match your search or status filter."}
+            </p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Ticket</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredTickets.map(ticket => (
+                    <tr key={ticket.id}>
+                      <td>CD-{ticket.id}</td>
+                      <td>{ticket.title}</td>
+
+                      <td>
+                        <select
+                          className="status-select"
+                          value={ticket.status}
+                          disabled={updatingTickets.includes(ticket.id)}
+                          onChange={event =>
+                            updateTicketStatus(
+                              ticket.id,
+                              event.target.value
+                            )
+                          }
+                          aria-label={`Status for ticket CD-${ticket.id}`}
+                        >
+                          <option value="Open">Open</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Resolved">Resolved</option>
+                        </select>
+                      </td>
+
+                      <td>
+                        {new Date(
+                          ticket.created_at
+                        ).toLocaleDateString()}
+                      </td>
+
+                      <td>
+                        <button
+                          type="button"
+                          className="delete-button"
+                          disabled={deletingTickets.includes(ticket.id)}
+                          onClick={() => deleteTicket(ticket.id)}
+                        >
+                          {deletingTickets.includes(ticket.id)
+                            ? "Deleting..."
+                            : "Delete"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="muted">
+            In Progress tickets: {inProgressCount}
+          </p>
+
+          <p className="muted">
+            Showing {filteredTickets.length} of {tickets.length} tickets
+          </p>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);

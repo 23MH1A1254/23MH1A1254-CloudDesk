@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build output
+dist/
+build/
+client/dist/
+server/dist/
+
+# Uploads & runtime data
+server/uploads/*
+!server/uploads/.gitkeep
+uploads/
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+postgres-data/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.pem
+*.key
+secrets/

@@ -1,0 +1,86 @@
+﻿import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./style.css";
+
+function App() {
+  const [tickets, setTickets] = useState([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [message, setMessage] = useState("Connecting to CloudDesk...");
+  const api = "http://localhost:5000/api";
+
+  async function loadTickets() {
+    try {
+      const response = await fetch(`${api}/tickets`);
+      if (!response.ok) throw new Error("API unavailable");
+      setTickets(await response.json());
+      setMessage("Your support workspace is ready");
+    } catch {
+      setMessage("Cannot connect to API. Check that Docker services are running.");
+    }
+  }
+
+  useEffect(() => { loadTickets(); }, []);
+
+  async function createTicket(event) {
+    event.preventDefault();
+    try {
+      const response = await fetch(`${api}/tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Request failed");
+      setTitle("");
+      setDescription("");
+      setMessage("Ticket created successfully");
+      loadTickets();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  return (
+    <div className="layout">
+      <aside>
+        <h2>☁ CloudDesk</h2>
+        <p>SMART SUPPORT</p>
+        <div className="nav active">▦ &nbsp; Overview</div>
+        <div className="nav">▤ &nbsp; Tickets</div>
+        <div className="nav">◉ &nbsp; Customers</div>
+        <div className="nav">⚙ &nbsp; Settings</div>
+        <div className="sidebar-bottom">Customer Support Platform</div>
+      </aside>
+      <main>
+        <header>
+          <div><span className="muted">Workspace / </span>Overview<h1>Good day, Support Team 👋</h1><p className="muted">Manage customer conversations in one place.</p></div>
+          <span className="pill">● Local workspace</span>
+        </header>
+        <div className="notice">{message}</div>
+        <section className="stats">
+          <article><p>Total tickets</p><h2>{tickets.length}</h2><small>All recorded tickets</small></article>
+          <article><p>Open tickets</p><h2>{tickets.filter(t => t.status === "Open").length}</h2><small>Awaiting resolution</small></article>
+          <article><p>Resolved tickets</p><h2>{tickets.filter(t => t.status === "Resolved").length}</h2><small>Completed tickets</small></article>
+        </section>
+        <section className="panel">
+          <h2>Create a support ticket</h2>
+          <form onSubmit={createTicket}>
+            <label>Ticket title<input value={title} onChange={e => setTitle(e.target.value)} required maxLength="200" placeholder="What does the customer need help with?" /></label>
+            <label>Description<textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Add details..." /></label>
+            <button type="submit">+ Create ticket</button>
+          </form>
+        </section>
+        <section className="panel">
+          <h2>Recent tickets</h2>
+          {tickets.length === 0 ? <p className="muted">No tickets yet. Create your first ticket above.</p> :
+            <div className="table-wrap"><table><thead><tr><th>ID</th><th>Ticket</th><th>Status</th><th>Created</th></tr></thead>
+              <tbody>{tickets.map(t => <tr key={t.id}><td>CD-{t.id}</td><td>{t.title}</td><td><span className="status">{t.status}</span></td><td>{new Date(t.created_at).toLocaleDateString()}</td></tr>)}</tbody>
+            </table></div>}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);

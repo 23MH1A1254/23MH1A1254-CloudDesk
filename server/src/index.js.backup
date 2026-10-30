@@ -1,0 +1,71 @@
+﻿const express = require("express");
+const cors = require("cors");
+const { Pool } = require("pg");
+
+const app = express();
+const port = process.env.PORT || 5000;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:8080" }));
+app.use(express.json());
+
+app.get("/api/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", app: "CloudDesk", database: "connected" });
+  } catch (error) {
+    res.status(503).json({ status: "error", database: "disconnected" });
+  }
+});
+
+app.get("/api/tickets", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, title, description, status, created_at FROM tickets ORDER BY id DESC"
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: "Unable to load tickets" });
+  }
+});
+
+app.post("/api/tickets", async (req, res) => {
+  const { title, description = "" } = req.body;
+  if (!title || typeof title !== "string" || !title.trim()) {
+    return res.status(400).json({ error: "Ticket title is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      "INSERT INTO tickets (title, description) VALUES ($1, $2) RETURNING *",
+      [title.trim(), String(description)]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: "Unable to create ticket" });
+  }
+});
+
+async function start() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status VARCHAR(30) NOT NULL DEFAULT 'Open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  app.listen(port, "0.0.0.0", () => {
+    console.log("CloudDesk API listening on port " + port);
+  });
+}
+
+start().catch(error => {
+  console.error("CloudDesk startup failed:", error.message);
+  process.exit(1);
+});

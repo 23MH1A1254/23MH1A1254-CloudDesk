@@ -1,0 +1,65 @@
+# CloudDesk - local development stack (PostgreSQL + API + web).
+# Usage: docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clouddesk-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clouddesk
+      POSTGRES_PASSWORD: clouddesk
+      POSTGRES_DB: clouddesk
+    ports:
+      - '5432:5432'
+    volumes:
+      - clouddesk_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clouddesk -d clouddesk']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: clouddesk-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://clouddesk:clouddesk@db:5432/clouddesk?schema=public
+      # Development-only secret. Replace it for anything beyond local use.
+      JWT_SECRET: ${JWT_SECRET:-local_dev_secret_change_me_0123456789abcdef}
+      JWT_EXPIRES_IN: 7d
+      BCRYPT_SALT_ROUNDS: 10
+      CLIENT_ORIGIN: http://localhost:8080
+      # Optional: export GEMINI_API_KEY in your shell to enable model-backed AI.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      STORAGE_DRIVER: local
+      UPLOAD_DIR: uploads
+      MAX_UPLOAD_SIZE_MB: 5
+      LOG_LEVEL: info
+    ports:
+      - '5000:5000'
+    volumes:
+      - clouddesk_uploads:/app/uploads
+
+  web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: clouddesk-web
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - '8080:80'
+
+volumes:
+  clouddesk_pgdata:
+  clouddesk_uploads:
